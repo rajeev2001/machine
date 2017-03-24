@@ -1,0 +1,170 @@
+---
+title: "Machine Learning Personal Activity Prediction"
+author: "Rajeev Kumar"
+date: "March 22, 2017"
+output: html_document
+---
+
+## Overview
+The aim of this work is to predict how well an individual performed exercise.
+
+Six participants were asked to perform barbell lifts correctly and incorrectly in 5 different ways.By using data from accelerometers on the belt, forearm, arm, and dumbell we aim to predict which class the observation falls in. "classe" variable in the training set describes manner in which an individual performed exercise.
+
+The machine learning algorithm described here is applied to the 20 test cases available in the test data. 
+
+## Machine Learning Prediction 
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+### Load Input Data
+
+```{r}
+urlTrain<-"https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+
+urlTest<-"https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+
+# Read input training data
+pmTrain <-read.csv(urlTrain,na.strings=c("NA", "#DIV/0!",""))
+
+# Read input test data
+pmTest <-read.csv(urlTest,na.strings=c("NA","#DIV/0!",""))
+
+```
+
+### Input Data Pre-Processing 
+1. Find Structure of pmTrain data set 
+
+```{r}
+dim(pmTrain)
+
+## count no of NA for each column in dataframe pmTrain
+
+x1<-apply(pmTrain,2,function (x){sum(is.na(x))})
+
+```
+
+We observed that majority of columns in dataframe pmTrain with non-zero
+NA has total count of NA in such columns more than 19000
+
+2. subset columns in input dataframe pmTrain where total count of NA in given column >19000 is false
+
+
+```{r}
+x1<-pmTrain[,-which(as.numeric(colSums(is.na(pmTrain)))>19000)]
+dim(x1)
+```
+
+3. Some variables are irrelevant to our current project: user_name, raw_timestamp_part_1, raw_timestamp_part_,2 cvtd_timestamp, new_window, and  num_window (columns 1 to 7). We can delete these variables
+
+```{r}
+x1<-x1[,-c(1:7)]
+dim(x1)
+```
+
+4. Load Caret package and rattle package
+```{r}
+library(caret)
+library(rattle)
+
+```
+
+### Create Data Partision into training and test data set
+
+
+```{r}
+# Create Data Partision into training and testing for input pre-prcessed dataset x1
+
+intrain<-createDataPartition(x1$classe,p=0.7,list=FALSE)
+
+training<-x1[intrain,]
+testing<-x1[-intrain,]
+
+dim (training)
+dim (testing)
+
+```
+
+
+
+
+### Model Building and Analysis 
+
+1. Model building and Analyisis using Decision Tree with default value of train function
+
+```{r}
+# Model building using rpart with default values of train function in CARET package
+set.seed (100)
+modFit1<-train (classe ~.,data=training,method="rpart")
+print(modFit1$finalModel)
+fancyRpartPlot(modFit1$finalModel)
+
+# Predictions on testing data set
+predictions1 <- predict(modFit1, newdata=testing)
+confusionMatrix(predictions1, testing$classe)
+```
+
+Overall accuracy of model is low hence let us run model by scaling and cross validations.
+
+
+2. Model building and Analyisis using Decision Tree with scaling and cross validation 
+
+```{r}
+# Model building using rpart with scaling and cross validation
+set.seed (100)
+
+modFit1 <- train(classe ~ .,  preProcess=c("center", "scale"), trControl=trainControl(method = "cv", number = 4), data = training, method="rpart")
+print(modFit1$finalModel)
+fancyRpartPlot(modFit1$finalModel)
+
+# Predictions on testing data set
+predictions1 <- predict(modFit1, newdata=testing)
+confusionMatrix(predictions1, testing$classe)
+```
+
+There is no imporvement in overall accurach hence let us predict using Generalized Boosted Model.
+
+3. Model building and Analyisis using Generalized Boosted Model 
+
+```{r}
+# Model building using Generalized Boosted Model 
+set.seed (100)
+
+controlGBM <- trainControl(method = "repeatedcv", number = 5, repeats = 1)
+
+modFitGBM <-train(classe ~ ., data=training, method = "gbm",trControl = controlGBM, verbose = FALSE)
+
+print(modFitGBM$finalModel)
+
+
+# Predictions on testing data set
+predictions2 <- predict(modFitGBM, newdata=testing)
+confusionMatrix(predictions2, testing$classe)
+qplot (predictions2,classe,data=testing)
+```
+
+
+### Applying best model on input testing data set pmTest
+The accuracy of 3 modeeling is as below
+1. Decision Tree with default value of train function : 0.4887
+2. Decision Tree with default value of train function : 0.4887
+3. Generalized Boosted Model                          : 0.9602
+
+Since Generalized Boosted Model has best accuracy among 3 model, it is chosen as
+best model to predict value for input test data set -pmTest.
+
+out-of-sample error rate for best model is expected to be approximately 1.0 - 0.9602= 0.0398.
+
+```{r}
+# Apply best model - Generalized Boosted Model on input testing data set pmTest
+set.seed (200)
+
+# Predictions
+predictionsInputTest <- predict(modFitGBM, newdata=pmTest)
+predictionsInputTest
+```
+
+### Conclusions 
+Among the 3 models used in this machine learning algoritham, Generalized Boosted Model has been chosen as the best model since it has best accuracy rate. Out-of-sample error rate for best model is expected to be approximately 0.0398.
